@@ -1,11 +1,26 @@
 from langchain_core.messages import HumanMessage
 from dotenv import load_dotenv
-from langchain_core.prompts import (ChatPromptTemplate,MessagesPlaceholder,HumanMessagePromptTemplate,AIMessagePromptTemplate)
-from langchain_core.prompts import FewShotChatMessagePromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.output_parsers import StrOutputParser
-from langchain_mongodb.chat_message_histories import MongoDBChatMessageHistory
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    HumanMessagePromptTemplate,
+    AIMessagePromptTemplate,
+)
+from langchain_core.prompts import (
+    FewShotChatMessagePromptTemplate,
+)
+from langchain_google_genai import (
+    ChatGoogleGenerativeAI,
+)
+from langchain_core.runnables.history import (
+    RunnableWithMessageHistory,
+)
+from langchain_core.output_parsers import (
+    StrOutputParser,
+)
+from langchain_mongodb.chat_message_histories import (
+    MongoDBChatMessageHistory,
+)
 import os
 
 load_dotenv()
@@ -14,12 +29,13 @@ load_dotenv()
 chave_api = os.getenv("GEMINI_API_KEY")
 mongo_host = os.getenv("CONNSTRING")
 
+
 # Verificar pergunta
 def verifica_pergunta(pergunta: str) -> str:
     llm = ChatGoogleGenerativeAI(
         google_api_key=chave_api,
         model="gemini-1.0-flash",
-        temperature=0
+        temperature=0,
     )
     prompt_avaliacao = (
         "Você é um assistente que verifica se um texto contém "
@@ -28,31 +44,39 @@ def verifica_pergunta(pergunta: str) -> str:
     )
 
     resposta_llm = llm.invoke(
-        [HumanMessage(content=prompt_avaliacao + "\n\nPergunta: " + pergunta)]
+        [
+            HumanMessage(
+                content=prompt_avaliacao
+                + "\n\nPergunta: "
+                + pergunta
+            )
+        ]
     )
     return resposta_llm.content.strip()
 
 
-
-def get_session_history(user_id, session_id) -> MongoDBChatMessageHistory:
+def get_session_history(
+    user_id, session_id
+) -> MongoDBChatMessageHistory:
     return MongoDBChatMessageHistory(
         session_id=f"{user_id}_{session_id}",
         connection_string=mongo_host,
         database_name="chatbot_db",
-        collection_name="chat_histories"
+        collection_name="chat_histories",
     )
+
 
 def gemini_resp(user_id, session_id, question):
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=0.7,
         top_p=0.95,
-        google_api_key=chave_api
+        google_api_key=chave_api,
     )
 
     system_prompt = (
-"system",
-"""
+        "system",
+        """
 ### PERSONA
 Você é o EiTruck.AI — um agente especializado em perguntas e respostas da empresa EiTruck, referência em soluções para transporte, logística e tecnologia embarcada. Sua principal característica é a precisão e o foco técnico. Você é claro, direto e detalhado, fornecendo informações relevantes de forma objetiva e sem rodeios. Seu objetivo é ajudar usuários com dúvidas específicas sobre os produtos, serviços e processos da EiTruck, oferecendo a melhor resposta possível de forma concisa.
 
@@ -80,51 +104,73 @@ Você é o EiTruck.AI — um agente especializado em perguntas e respostas da em
 
 ### HISTÓRICO DA CONVERSA
 {chat_history}
-"""
+""",
     )
-    example_prompt = ChatPromptTemplate.from_messages([
-        HumanMessagePromptTemplate.from_template("{human}"),
-        AIMessagePromptTemplate.from_template("{ai}")
-    ])
+    example_prompt = ChatPromptTemplate.from_messages(
+        [
+            HumanMessagePromptTemplate.from_template(
+                "{human}"
+            ),
+            AIMessagePromptTemplate.from_template(
+                "{ai}"
+            ),
+        ]
+    )
     shots = []
     fewshots = FewShotChatMessagePromptTemplate(
         examples=shots,
-        example_prompt=example_prompt
+        example_prompt=example_prompt,
     )
-    prompt = ChatPromptTemplate.from_messages([
-        system_prompt,
-        fewshots,
-        MessagesPlaceholder("chat_history"),
-        ("human", "{usuario}")
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            system_prompt,
+            fewshots,
+            MessagesPlaceholder("chat_history"),
+            ("human", "{usuario}"),
+        ]
+    )
     base_chain = prompt | llm | StrOutputParser()
     chain = RunnableWithMessageHistory(
         base_chain,
-        get_session_history=lambda _: get_session_history(user_id,session_id),
+        get_session_history=lambda _: get_session_history(
+            user_id, session_id
+        ),
         input_messages_key="usuario",
-        history_messages_key="chat_history"
+        history_messages_key="chat_history",
     )
-    if question.lower() in ('sair', 'end', 'fim', 'tchau', 'bye'):
+    if question.lower() in (
+        "sair",
+        "end",
+        "fim",
+        "tchau",
+        "bye",
+    ):
         return "Encerrando o chat."
     try:
         resposta = chain.invoke(
             {"usuario": question},
-            config={"configurable": {"session_id": session_id}}
+            config={
+                "configurable": {
+                    "session_id": session_id
+                }
+            },
         )
         return resposta
     except Exception as e:
         return f"Não foi possível responder: {e}"
 
+
 # Verificar Resposta
-def juiz_resposta(pergunta: str, resposta: str) -> str:
+def juiz_resposta(
+    pergunta: str, resposta: str
+) -> str:
     juiz = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=0.5,
-        google_api_key=chave_api
+        google_api_key=chave_api,
     )
 
-    prompt_juiz = (
-        """
+    prompt_juiz = """
 Você é um avaliador imparcial. Sua única tarefa é revisar a resposta de um tutor de IA.
 
 ### OBJETIVO
@@ -187,16 +233,25 @@ Retorne **somente** este JSON.
 - Verena Marostica
 
         """
-    )
 
     resposta_juiz = juiz(
-        [HumanMessage(
-            content=prompt_juiz + "\n\nPergunta:" + pergunta + "\nResposta:" + resposta
-        )]
+        [
+            HumanMessage(
+                content=prompt_juiz
+                + "\n\nPergunta:"
+                + pergunta
+                + "\nResposta:"
+                + resposta
+            )
+        ]
     )
 
     resposta_juiz = resposta_juiz.content.strip()
     if resposta_juiz.startswith("```json"):
-        resposta_juiz = resposta_juiz[len("```json"):].rstrip("```").strip()
+        resposta_juiz = (
+            resposta_juiz[len("```json") :]
+            .rstrip("```")
+            .strip()
+        )
 
     return resposta_juiz
