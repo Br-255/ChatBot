@@ -44,20 +44,12 @@ def verifica_pergunta(pergunta: str) -> str:
     )
 
     resposta_llm = llm.invoke(
-        [
-            HumanMessage(
-                content=prompt_avaliacao
-                + "\n\nPergunta: "
-                + pergunta
-            )
-        ]
+        [HumanMessage(content=prompt_avaliacao + "\n\nPergunta: " + pergunta)]
     )
     return resposta_llm.content.strip()
 
 
-def get_session_history(
-    user_id, session_id
-) -> MongoDBChatMessageHistory:
+def get_session_history(user_id, session_id) -> MongoDBChatMessageHistory:
     return MongoDBChatMessageHistory(
         session_id=f"{user_id}_{session_id}",
         connection_string=mongo_host,
@@ -108,12 +100,8 @@ Você é o EiTruck.AI — um agente especializado em perguntas e respostas da em
     )
     example_prompt = ChatPromptTemplate.from_messages(
         [
-            HumanMessagePromptTemplate.from_template(
-                "{human}"
-            ),
-            AIMessagePromptTemplate.from_template(
-                "{ai}"
-            ),
+            HumanMessagePromptTemplate.from_template("{human}"),
+            AIMessagePromptTemplate.from_template("{ai}"),
         ]
     )
     shots = []
@@ -132,9 +120,7 @@ Você é o EiTruck.AI — um agente especializado em perguntas e respostas da em
     base_chain = prompt | llm | StrOutputParser()
     chain = RunnableWithMessageHistory(
         base_chain,
-        get_session_history=lambda _: get_session_history(
-            user_id, session_id
-        ),
+        get_session_history=lambda _: get_session_history(user_id, session_id),
         input_messages_key="usuario",
         history_messages_key="chat_history",
     )
@@ -149,11 +135,7 @@ Você é o EiTruck.AI — um agente especializado em perguntas e respostas da em
     try:
         resposta = chain.invoke(
             {"usuario": question},
-            config={
-                "configurable": {
-                    "session_id": session_id
-                }
-            },
+            config={"configurable": {"session_id": session_id}},
         )
         return resposta
     except Exception as e:
@@ -161,9 +143,7 @@ Você é o EiTruck.AI — um agente especializado em perguntas e respostas da em
 
 
 # Verificar Resposta
-def juiz_resposta(
-    pergunta: str, resposta: str
-) -> str:
+def juiz_resposta(pergunta: str, resposta: str) -> str:
     juiz = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=0.5,
@@ -248,10 +228,6 @@ Retorne **somente** este JSON.
 
     resposta_juiz = resposta_juiz.content.strip()
     if resposta_juiz.startswith("```json"):
-        resposta_juiz = (
-            resposta_juiz[len("```json") :]
-            .rstrip("```")
-            .strip()
-        )
+        resposta_juiz = resposta_juiz[len("```json") :].rstrip("```").strip()
 
     return resposta_juiz
